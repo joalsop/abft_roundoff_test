@@ -27,6 +27,7 @@ atol = 0.1
 
 epsilon = 0.0001 # avoid divide by zero issues
 avg_only = True
+print_cdf = True
 
 def mod_gemm(A, B, C):
     M = C.shape[0]
@@ -316,22 +317,24 @@ def test_matrix_mul(m, n, k, datatype_str):
     #    print("last col:\n%s" % last_col)
     #    print("postcn:\n%s" % postcn)
 
-    return (abft_max_diff, abft_max_rdiff, abft_num_diff, abft_num_rdiff)
+    return (abft_max_diff, abft_max_rdiff, abft_num_diff, abft_num_rdiff, \
+        abft_max_diff_a, abft_max_diff_b, abft_max_diff_c, abft_max_diff_presum, \
+        abft_max_diff_postsum1, abft_max_diff_postsum2)
 
 gemm_sizes = [
         #2,
-        #4,
-        8,
+        4,
+        #8,
         16,
-        32,
+        #32,
         64,
         # setting use_mod for below sizes it will take a while
         #128,
-        #256,
+        256,
         #512,
-        #1024,
+        1024,
         #2048,
-        #4096,
+        4096,
         #8192,
         #16384,
         ]
@@ -351,7 +354,7 @@ datatypes = [
 stats = ["max adiff", "max rdiff", "num adiff", "num rdiff", "max diff a", "max diff b", \
     "max diff c", "max diff presum", "max diff postsum1", "max diff postsum2"]
 
-iters = 40
+iters = 100
 
 if __name__ == "__main__":
     header = {}
@@ -359,6 +362,16 @@ if __name__ == "__main__":
     print_lines_avg = {}
     print_lines_max = {}
     print_lines_stdev = {}
+    cdf_header = {}
+    print_lines_cdf = {}
+
+    if print_cdf:
+        for size in gemm_sizes:
+            cdf_header[size] = "false positives, "
+            for dtype in datatypes:
+                cdf_header[size] += "%s threshold," % (dtype)
+            print_lines_cdf[size] = []
+    # always init and populate specified stats
     for stat in stats:
         header[stat] = "shape,"
         print_lines_min[stat] = []
@@ -385,14 +398,18 @@ if __name__ == "__main__":
         print_line_avg = {}
         print_line_max = {}
         print_line_stdev = {}
+        # these stats need dtype-indexed dicts
+        # for use in print_cdf
+        max_diffs = {}
+        max_rdiffs = {}
         for stat in stats:
             print_line_min[stat] = "%dx%dx%d," % (m, n, k)
             print_line_avg[stat] = "%dx%dx%d," % (m, n, k)
             print_line_max[stat] = "%dx%dx%d," % (m, n, k)
             print_line_stdev[stat] = "%dx%dx%d," % (m, n, k)
         for dtype in datatypes:
-            max_diffs = []
-            max_rdiffs = []
+            max_diffs[dtype] = []
+            max_rdiffs[dtype] = []
             num_diffs = []
             num_rdiffs = []
             max_diffs_a = []
@@ -401,10 +418,10 @@ if __name__ == "__main__":
             max_diffs_presum = []
             max_diffs_postsum1 = []
             max_diffs_postsum2 = []
-            for iter in range(iters):
+            for idx in range(iters):
                 (max_diff, max_rdiff, num_diff, num_rdiff, max_diff_a, max_diff_b, max_diff_c, max_diff_presum, max_diff_postsum1, max_diff_postsum2) = test_matrix_mul(m,n,k, dtype)
-                max_diffs.append(max_diff)
-                max_rdiffs.append(max_rdiff)
+                max_diffs[dtype].append(max_diff)
+                max_rdiffs[dtype].append(max_rdiff)
                 num_diffs.append(num_diff)
                 num_rdiffs.append(num_rdiff)
                 max_diffs_a.append(max_diff_a)
@@ -414,13 +431,13 @@ if __name__ == "__main__":
                 max_diffs_postsum1.append(max_diff_postsum1)
                 max_diffs_postsum2.append(max_diff_postsum2)
                 #print("%dx%dx%d %s max diff:%f, max rdiff:%f, num diff:%d, num rdiff:%d" % (m, n, k, dtype, max_diff, max_rdiff, num_diff, num_rdiff))
-            print_line_min["max adiff"] += "%f, " % min(max_diffs)
-            print_line_min["max rdiff"] += "%f, " % min(max_rdiffs)
+            print_line_min["max adiff"] += "%f, " % min(max_diffs[dtype])
+            print_line_min["max rdiff"] += "%f, " % min(max_rdiffs[dtype])
             print_line_min["num adiff"] += "%d, " % min(num_diffs)
             print_line_min["num rdiff"] += "%d, " % min(num_rdiffs)
 
-            print_line_avg["max adiff"] += "%f, " % (sum(max_diffs)/len(max_diffs))
-            print_line_avg["max rdiff"] += "%f, " % (sum(max_rdiffs)/len(max_rdiffs))
+            print_line_avg["max adiff"] += "%f, " % (sum(max_diffs[dtype])/len(max_diffs[dtype]))
+            print_line_avg["max rdiff"] += "%f, " % (sum(max_rdiffs[dtype])/len(max_rdiffs[dtype]))
             print_line_avg["num adiff"] += "%f, " % (sum(num_diffs)/len(num_diffs))
             print_line_avg["num rdiff"] += "%f, " % (sum(num_rdiffs)/len(num_rdiffs))
             print_line_avg["max diff a"] += "%f, " % (sum(max_diffs_a)/len(max_diffs_a))
@@ -430,40 +447,63 @@ if __name__ == "__main__":
             print_line_avg["max diff postsum1"] += "%f, " % (sum(max_diffs_postsum1)/len(max_diffs_postsum1))
             print_line_avg["max diff postsum2"] += "%f, " % (sum(max_diffs_postsum2)/len(max_diffs_postsum2))
 
-            print_line_max["max adiff"] += "%f, " % max(max_diffs)
-            print_line_max["max rdiff"] += "%f, " % max(max_rdiffs)
+            print_line_max["max adiff"] += "%f, " % max(max_diffs[dtype])
+            print_line_max["max rdiff"] += "%f, " % max(max_rdiffs[dtype])
             print_line_max["num adiff"] += "%d, " % max(num_diffs)
             print_line_max["num rdiff"] += "%d, " % max(num_rdiffs)
 
-            if len(max_diffs) > 1:
-                print_line_stdev["max adiff"] += "%f, " % statistics.stdev(max_diffs)
-                print_line_stdev["max rdiff"] += "%f, " % statistics.stdev(max_rdiffs)
+            if len(max_diffs[dtype]) > 1:
+                print_line_stdev["max adiff"] += "%f, " % statistics.stdev(max_diffs[dtype])
+                print_line_stdev["max rdiff"] += "%f, " % statistics.stdev(max_rdiffs[dtype])
                 print_line_stdev["num adiff"] += "%f, " % statistics.stdev(num_diffs)
                 print_line_stdev["num rdiff"] += "%f, " % statistics.stdev(num_rdiffs)
+        if print_cdf:
+            for dtype in datatypes:
+                max_diffs[dtype].sort()
+            dummy_dtype = datatypes[0]
+            total_samples = len(max_diffs[dummy_dtype])
+            print_lines_cdf[size].append(("%d, " % total_samples) + "0, "*(len(datatypes)+1))
+            for idx in range(len(max_diffs[dummy_dtype])):
+                line1 = "%d, " % (total_samples-idx)
+                line2 = "%d, " % (total_samples-idx-1)
+                for dtype in datatypes:
+                    line1 += ("%f, " % max_diffs[dtype][idx])
+                    line2 += ("%f, " % max_diffs[dtype][idx])
+                print_lines_cdf[size].append(line1)
+                print_lines_cdf[size].append(line2)
 
         for stat in stats:
             print_lines_min[stat].append(print_line_min[stat])
             print_lines_avg[stat].append(print_line_avg[stat])
             print_lines_max[stat].append(print_line_max[stat])
             print_lines_stdev[stat].append(print_line_stdev[stat])
-    for stat in stats:
-        print("\n")
-        print("#### %s (avg) ####" % stat)
-        print(header[stat])
-        for print_line in print_lines_avg[stat]:
-            print(print_line)
-        if iters > 1 and not avg_only:
-            print("#### %s (min) ####" % stat)
-            print(header[stat])
-            for print_line in print_lines_min[stat]:
+
+    if print_cdf:
+        for size in gemm_sizes:
+            print("\n")
+            print("#### %s ####" % size)
+            print(cdf_header[size])
+            for print_line in print_lines_cdf[size]:
                 print(print_line)
-            print("#### %s (max) ####" % stat)
+    else:
+        for stat in stats:
+            print("\n")
+            print("#### %s (avg) ####" % stat)
             print(header[stat])
-            for print_line in print_lines_max[stat]:
+            for print_line in print_lines_avg[stat]:
                 print(print_line)
-            print("#### %s (stdev) ####" % stat)
-            print(header[stat])
-            for print_line in print_lines_stdev[stat]:
-                print(print_line)
+            if iters > 1 and not avg_only:
+                print("#### %s (min) ####" % stat)
+                print(header[stat])
+                for print_line in print_lines_min[stat]:
+                    print(print_line)
+                print("#### %s (max) ####" % stat)
+                print(header[stat])
+                for print_line in print_lines_max[stat]:
+                    print(print_line)
+                print("#### %s (stdev) ####" % stat)
+                print(header[stat])
+                for print_line in print_lines_stdev[stat]:
+                    print(print_line)
     print("\nTest complete")
 
